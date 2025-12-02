@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import './app.css';
+import './index.css';
 // Components
 import Menu from './components/Menu';
 import Cart from './components/Cart';

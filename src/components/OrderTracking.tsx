@@ -1,20 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Container,
-  Typography,
-  Paper,
-  Box,
-  Card,
-  CardContent,
-  Chip,
-  LinearProgress,
   Alert,
   CircularProgress,
-  Button,
-  Stack,
-  Avatar,
-  useTheme,
-  useMediaQuery,
 } from '@mui/material';
 import {
   CheckCircle as CheckCircleIcon,
@@ -26,6 +13,8 @@ import {
 } from '@mui/icons-material';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { apiService } from '../services/api';
+import { useSocket } from '../context/SocketContext';
+import { useRestaurant } from '../context/RestaurantContext';
 
 interface Order {
   id: number;
@@ -51,27 +40,60 @@ const OrderTracking: React.FC = () => {
 
   const { orderId } = useParams<{ orderId: string }>();
   const [searchParams] = useSearchParams();
-  const theme = useTheme();
+  const { socket, requestOrderTracking } = useSocket();
+  const { restaurant, switchRestaurant } = useRestaurant();
   
   const tableUniqueId = searchParams.get('table');
   const roomUniqueId = searchParams.get('room');
+  
+  // Extract restaurant slug from URL if present
+  const restaurantSlug = window.location.pathname.match(/\/r\/([^\/]+)/)?.[1];
+
+  // Set restaurant context from URL if available
+  useEffect(() => {
+    if (restaurantSlug && (!restaurant || restaurant.slug !== restaurantSlug)) {
+      switchRestaurant(restaurantSlug);
+    }
+  }, [restaurantSlug, restaurant, switchRestaurant]);
 
   useEffect(() => {
     const loadOrder = async () => {
       try {
         setLoading(true);
+        setError('');
+        
+        // Ensure restaurant context is set before fetching order
+        if (restaurant) {
+          apiService.setRestaurantContext(restaurant.id);
+          apiService.setRestaurantSlug(restaurant.slug);
+        }
+        
         if (orderId && !isNaN(parseInt(orderId))) {
+          console.log('Loading order:', orderId, 'Restaurant:', restaurant?.name);
           const orderData = await apiService.getOrder(parseInt(orderId));
+          console.log('Order loaded:', orderData);
           setOrder(orderData);
+          
+          // Request real-time tracking for this order
+          if (socket) {
+            requestOrderTracking(parseInt(orderId), tableUniqueId || undefined, roomUniqueId || undefined);
+          }
         } else {
           setError('Invalid Order ID');
         }
       } catch (error: any) {
         console.error('Error loading order:', error);
+        const errorMessage = error.response?.data?.error || 
+                            error.response?.data?.detail || 
+                            error.message || 
+                            'Failed to load order. Please try again.';
+        
         if (error.response?.status === 404) {
           setError('Order not found. It may have been deleted or the ID is incorrect.');
+        } else if (error.response?.status === 401 || error.response?.status === 403) {
+          setError('Authentication required. Please make sure you are logged in or the order belongs to your restaurant.');
         } else {
-          setError(error.response?.data?.error || 'Failed to load order. Please try again.');
+          setError(errorMessage);
         }
       } finally {
         setLoading(false);
@@ -79,6 +101,46 @@ const OrderTracking: React.FC = () => {
     };
 
     loadOrder();
+  }, [orderId, socket, requestOrderTracking, tableUniqueId, roomUniqueId, restaurant]);
+
+  // Socket.IO event listeners for real-time order updates
+  useEffect(() => {
+    if (!orderId) return;
+
+    const handleOrderStatus = (event: CustomEvent) => {
+      const data = event.detail;
+      console.log('📊 Order status update received via Socket.IO:', data);
+      if (data.order && data.order.id === parseInt(orderId)) {
+        setOrder(data.order);
+      }
+    };
+
+    const handleOrderUpdate = (event: CustomEvent) => {
+      const data = event.detail;
+      console.log('📋 Order update received via Socket.IO:', data);
+      if (data.order_id === parseInt(orderId)) {
+        setOrder(prevOrder => 
+          prevOrder ? { ...prevOrder, status: data.status } : null
+        );
+      }
+    };
+
+    const handleTrackingStarted = (event: CustomEvent) => {
+      const data = event.detail;
+      console.log('🔍 Tracking started for order:', data.order_id);
+    };
+
+    // Add event listeners
+    window.addEventListener('orderStatus', handleOrderStatus as EventListener);
+    window.addEventListener('orderUpdated', handleOrderUpdate as EventListener);
+    window.addEventListener('trackingStarted', handleTrackingStarted as EventListener);
+
+    return () => {
+      // Remove event listeners
+      window.removeEventListener('orderStatus', handleOrderStatus as EventListener);
+      window.removeEventListener('orderUpdated', handleOrderUpdate as EventListener);
+      window.removeEventListener('trackingStarted', handleTrackingStarted as EventListener);
+    };
   }, [orderId]);
 
   const getStatusStep = (status: string) => {
@@ -96,28 +158,13 @@ const OrderTracking: React.FC = () => {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'pending':
-        return 'warning';
-      case 'preparing':
-        return 'info';
-      case 'ready':
-        return 'success';
-      case 'completed':
-        return 'success';
-      default:
-        return 'default';
-    }
-  };
-
   const getStatusIcon = (step: number, currentStep: number) => {
     if (step < currentStep) {
-      return <CheckCircleIcon color="success" />;
+      return <CheckCircleIcon className="text-green-500" />;
     } else if (step === currentStep) {
-      return <ScheduleIcon color="primary" />;
+      return <ScheduleIcon className="text-red-500" />;
     } else {
-      return <ScheduleIcon color="disabled" />;
+      return <ScheduleIcon className="text-gray-400" />;
     }
   };
 
@@ -136,112 +183,68 @@ const OrderTracking: React.FC = () => {
   };
 
   const handleOrderMore = () => {
-    const url = roomUniqueId ? `/?room=${roomUniqueId}` : (tableUniqueId ? `/?table=${tableUniqueId}` : '/');
+    const restaurantSlug = restaurant?.slug || window.location.pathname.match(/\/r\/([^\/]+)/)?.[1];
+    const basePath = restaurantSlug ? `/r/${restaurantSlug}` : '';
+    const url = roomUniqueId 
+      ? `${basePath}/?room=${roomUniqueId}` 
+      : (tableUniqueId 
+        ? `${basePath}/?table=${tableUniqueId}` 
+        : `${basePath}/`);
     window.location.href = url;
   };
 
   if (loading) {
     return (
-      <Box 
-        sx={{ 
-          minHeight: '100vh',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
-          backgroundColor: '#f8f9fa',
-        }}
-      >
-        <CircularProgress size={80} sx={{ color: '#d32f2f', mb: 3 }} />
-        <Typography variant="h5" sx={{ color: '#333', fontWeight: 600, mb: 1 }}>
-          Loading Order Details...
-        </Typography>
-        <Typography variant="body1" sx={{ color: '#666' }}>
-          Order ID: {orderId}
-        </Typography>
-      </Box>
+      <div className="min-h-screen bg-gray-900 flex flex-col justify-center items-center p-4">
+        <CircularProgress sx={{ color: '#d32f2f', mb: 3 }} size={60} />
+        <h2 className="text-xl font-semibold text-gray-200 mb-2">Loading Order Details...</h2>
+        <p className="text-gray-400">Order ID: {orderId}</p>
+        {restaurant && (
+          <p className="text-gray-500 text-sm mt-2">Restaurant: {restaurant.name}</p>
+        )}
+      </div>
     );
   }
 
   if (error || !order) {
     return (
-      <Container maxWidth="md" sx={{ mt: 4, mb: 4 }}>
-        <Paper 
-          elevation={2}
-          sx={{ 
-            p: 4, 
-            textAlign: 'center',
-            borderRadius: 3,
-            background: 'linear-gradient(135deg, #f5f5f5 0%, #ffffff 100%)',
-          }}
-        >
-          <Avatar 
-            sx={{ 
-              width: 80, 
-              height: 80, 
-              mx: 'auto', 
-              mb: 2,
-              backgroundColor: '#f44336',
-            }}
-          >
-            <ReceiptIcon sx={{ fontSize: 40 }} />
-          </Avatar>
-          
-          <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }}>
-            {error || 'Order not found'}
-          </Alert>
-          
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="center">
-            <Button 
-              variant="contained" 
-              onClick={() => window.history.back()}
-              startIcon={<BackIcon />}
-              sx={{ 
-                backgroundColor: '#d32f2f',
-                '&:hover': { backgroundColor: '#b71c1c' },
-                textTransform: 'none',
-                fontWeight: 600,
-              }}
-            >
-              Go Back
-            </Button>
-            <Button 
-              variant="outlined" 
-              onClick={handleOrderMore}
-              startIcon={<CartIcon />}
-              sx={{ 
-                borderColor: '#d32f2f',
-                color: '#d32f2f',
-                '&:hover': { 
-                  borderColor: '#b71c1c',
-                  backgroundColor: 'rgba(211, 47, 47, 0.1)'
-                },
-                textTransform: 'none',
-                fontWeight: 600,
-              }}
-            >
-              Order More Food
-            </Button>
-            <Button 
-              variant="outlined" 
-              onClick={() => window.location.href = '/'}
-              startIcon={<HomeIcon />}
-              sx={{ 
-                borderColor: '#666',
-                color: '#666',
-                '&:hover': { 
-                  borderColor: '#333',
-                  backgroundColor: 'rgba(0,0,0,0.1)'
-                },
-                textTransform: 'none',
-                fontWeight: 600,
-              }}
-            >
-              Go to Home
-            </Button>
-          </Stack>
-        </Paper>
-      </Container>
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+        <div className="bg-gray-800 rounded-2xl shadow-lg p-6 max-w-md w-full border border-gray-700">
+          <div className="text-center">
+            <div className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+              <ReceiptIcon className="text-white text-2xl" />
+            </div>
+            
+            <Alert severity="error" className="mb-4 rounded-lg bg-red-900/20 border border-red-700 text-red-200">
+              {error || 'Order not found'}
+            </Alert>
+            
+            <div className="space-y-3">
+              <button 
+                onClick={() => window.history.back()}
+                className="w-full bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors"
+              >
+                <BackIcon />
+                Go Back
+              </button>
+              <button 
+                onClick={handleOrderMore}
+                className="w-full border border-red-500 text-red-500 hover:bg-red-500/10 font-semibold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors"
+              >
+                <CartIcon />
+                Order More Food
+              </button>
+              <button 
+                onClick={() => window.location.href = '/'}
+                className="w-full border border-gray-600 text-gray-300 hover:bg-gray-700 font-semibold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors"
+              >
+                <HomeIcon />
+                Go to Home
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -249,309 +252,187 @@ const OrderTracking: React.FC = () => {
   const items = parseItems(order.items_json || '{}');
 
   return (
-    <Box sx={{ minHeight: '100vh', backgroundColor: '#f8f9fa' }}>
-      <Container maxWidth="md" sx={{ py: 4 }}>
-        {/* Header */}
-        <Box sx={{ mb: 4, textAlign: 'center' }}>
-          <Typography variant="h3" sx={{ fontWeight: 700, color: '#333', mb: 1 }}>
-            Order #{order.id}
-          </Typography>
-          <Typography variant="body1" sx={{ color: '#666' }}>
-            Track your order progress
-          </Typography>
-        </Box>
+    <div className="min-h-screen bg-gray-900">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-red-500 to-red-600 text-white p-4">
+        <div className="max-w-md mx-auto">
+          <div className="flex items-center gap-3 mb-2">
+            <button 
+              onClick={() => window.history.back()}
+              className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+            >
+              <BackIcon />
+            </button>
+            <h1 className="text-2xl font-bold">Order #{order.id}</h1>
+          </div>
+          <p className="text-red-100 text-sm">Track your order progress</p>
+        </div>
+      </div>
 
+      <div className="max-w-md mx-auto p-4 space-y-4">
         {/* Order Details Card */}
-        <Paper 
-          elevation={2}
-          sx={{ 
-            p: { xs: 2, md: 3 }, 
-            mb: 3,
-            borderRadius: 3,
-            background: 'linear-gradient(135deg, #d32f2f 0%, #b71c1c 100%)',
-            color: 'white'
-          }}
-        >
-          <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, mb: 3 }}>
-            Order Details
-          </Typography>
+        <div className="bg-gradient-to-r from-red-500 to-red-600 text-white rounded-2xl p-4 shadow-lg">
+          <h2 className="text-lg font-bold mb-3">Order Details</h2>
           
-          <Box sx={{ 
-            display: 'grid', 
-            gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, 
-            gap: 3 
-          }}>
-            <Box>
-              <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                Customer
-              </Typography>
-              <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                {order.name}
-              </Typography>
-            </Box>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <p className="text-red-200 text-xs">Customer</p>
+              <p className="font-semibold">{order.name || 'Unknown'}</p>
+            </div>
             
-            <Box>
-              <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                {order.order_type === 'room' ? 'Room' : 'Table'}
-              </Typography>
-              <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                {order.table}
-              </Typography>
-            </Box>
+            <div>
+              <p className="text-red-200 text-xs">{order.order_type === 'room' ? 'Room' : 'Table'}</p>
+              <p className="font-semibold">{order.table || '-'}</p>
+            </div>
             
-            <Box>
-              <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                Total Amount
-              </Typography>
-              <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                ₹{(parseFloat(order.price) || 0).toFixed(2)}
-              </Typography>
-            </Box>
+            <div>
+              <p className="text-red-200 text-xs">Total Amount</p>
+              <p className="font-bold text-lg">₹{(parseFloat(order.price) || 0).toFixed(2)}</p>
+            </div>
             
-            <Box>
-              <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                Estimated Time
-              </Typography>
-              <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                {order.estimated_time || 20} minutes
-              </Typography>
-            </Box>
-          </Box>
+            <div>
+              <p className="text-red-200 text-xs">Estimated Time</p>
+              <p className="font-semibold">{order.estimated_time || 20} minutes</p>
+            </div>
+          </div>
 
           {order.special_instructions && (
-            <Box sx={{ mt: 3, pt: 3, borderTop: '1px solid rgba(255,255,255,0.3)' }}>
-              <Typography variant="body2" sx={{ opacity: 0.8, mb: 1 }}>
-                Special Instructions
-              </Typography>
-              <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                {order.special_instructions}
-              </Typography>
-            </Box>
+            <div className="mt-3 pt-3 border-t border-red-400">
+              <p className="text-red-200 text-xs mb-1">Special Instructions</p>
+              <p className="text-sm">{order.special_instructions}</p>
+            </div>
           )}
-        </Paper>
+        </div>
 
         {/* Order Status Progress */}
-        <Paper 
-          elevation={2}
-          sx={{ 
-            p: { xs: 2, md: 3 }, 
-            mb: 3,
-            borderRadius: 3,
-            background: 'linear-gradient(135deg, #f5f5f5 0%, #ffffff 100%)',
-          }}
-        >
-          <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: '#333', mb: 3 }}>
-            Order Status
-          </Typography>
+        <div className="bg-gray-800 rounded-2xl p-4 shadow-lg border border-gray-700">
+          <h2 className="text-lg font-bold text-gray-200 mb-3">Order Status</h2>
           
-          <Box sx={{ mb: 3 }}>
-            <LinearProgress 
-              variant="determinate" 
-              value={(currentStep / 4) * 100} 
-              sx={{ 
-                height: 10, 
-                borderRadius: 5,
-                backgroundColor: '#e0e0e0',
-                '& .MuiLinearProgress-bar': {
-                  backgroundColor: '#d32f2f',
-                }
-              }}
-            />
-          </Box>
+          {/* Progress Bar */}
+          <div className="mb-4">
+            <div className="w-full bg-gray-700 rounded-full h-2">
+              <div 
+                className="bg-red-500 h-2 rounded-full transition-all duration-500"
+                style={{ width: `${(currentStep / 4) * 100}%` }}
+              ></div>
+            </div>
+          </div>
 
-          <Box sx={{ 
-            display: 'grid', 
-            gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' }, 
-            gap: 2 
-          }}>
-            <Box sx={{ textAlign: 'center' }}>
-              <Avatar 
-                sx={{ 
-                  mx: 'auto', 
-                  mb: 1,
-                  backgroundColor: currentStep >= 1 ? '#d32f2f' : '#e0e0e0',
-                  color: currentStep >= 1 ? 'white' : '#666',
-                }}
-              >
+          {/* Status Steps */}
+          <div className="grid grid-cols-4 gap-2">
+            <div className="text-center">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center mx-auto mb-1 ${
+                currentStep >= 1 ? 'bg-red-500' : 'bg-gray-600'
+              }`}>
                 {getStatusIcon(1, currentStep)}
-              </Avatar>
-              <Typography variant="body2" sx={{ fontWeight: 600, color: currentStep >= 1 ? '#d32f2f' : '#666' }}>
+              </div>
+              <p className={`text-xs font-semibold ${
+                currentStep >= 1 ? 'text-red-500' : 'text-gray-400'
+              }`}>
                 Pending
-              </Typography>
-            </Box>
-            <Box sx={{ textAlign: 'center' }}>
-              <Avatar 
-                sx={{ 
-                  mx: 'auto', 
-                  mb: 1,
-                  backgroundColor: currentStep >= 2 ? '#d32f2f' : '#e0e0e0',
-                  color: currentStep >= 2 ? 'white' : '#666',
-                }}
-              >
+              </p>
+            </div>
+            <div className="text-center">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center mx-auto mb-1 ${
+                currentStep >= 2 ? 'bg-red-500' : 'bg-gray-600'
+              }`}>
                 {getStatusIcon(2, currentStep)}
-              </Avatar>
-              <Typography variant="body2" sx={{ fontWeight: 600, color: currentStep >= 2 ? '#d32f2f' : '#666' }}>
+              </div>
+              <p className={`text-xs font-semibold ${
+                currentStep >= 2 ? 'text-red-500' : 'text-gray-400'
+              }`}>
                 Preparing
-              </Typography>
-            </Box>
-            <Box sx={{ textAlign: 'center' }}>
-              <Avatar 
-                sx={{ 
-                  mx: 'auto', 
-                  mb: 1,
-                  backgroundColor: currentStep >= 3 ? '#d32f2f' : '#e0e0e0',
-                  color: currentStep >= 3 ? 'white' : '#666',
-                }}
-              >
+              </p>
+            </div>
+            <div className="text-center">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center mx-auto mb-1 ${
+                currentStep >= 3 ? 'bg-red-500' : 'bg-gray-600'
+              }`}>
                 {getStatusIcon(3, currentStep)}
-              </Avatar>
-              <Typography variant="body2" sx={{ fontWeight: 600, color: currentStep >= 3 ? '#d32f2f' : '#666' }}>
+              </div>
+              <p className={`text-xs font-semibold ${
+                currentStep >= 3 ? 'text-red-500' : 'text-gray-400'
+              }`}>
                 Ready
-              </Typography>
-            </Box>
-            <Box sx={{ textAlign: 'center' }}>
-              <Avatar 
-                sx={{ 
-                  mx: 'auto', 
-                  mb: 1,
-                  backgroundColor: currentStep >= 4 ? '#d32f2f' : '#e0e0e0',
-                  color: currentStep >= 4 ? 'white' : '#666',
-                }}
-              >
+              </p>
+            </div>
+            <div className="text-center">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center mx-auto mb-1 ${
+                currentStep >= 4 ? 'bg-red-500' : 'bg-gray-600'
+              }`}>
                 {getStatusIcon(4, currentStep)}
-              </Avatar>
-              <Typography variant="body2" sx={{ fontWeight: 600, color: currentStep >= 4 ? '#d32f2f' : '#666' }}>
+              </div>
+              <p className={`text-xs font-semibold ${
+                currentStep >= 4 ? 'text-red-500' : 'text-gray-400'
+              }`}>
                 Completed
-              </Typography>
-            </Box>
-          </Box>
+              </p>
+            </div>
+          </div>
 
-          <Box sx={{ mt: 3, textAlign: 'center' }}>
-            <Chip 
-              label={(order.status || 'pending').toUpperCase()} 
-              color={getStatusColor(order.status || 'pending') as any}
-              variant="outlined"
-              size="medium"
-              sx={{ fontWeight: 600 }}
-            />
-          </Box>
-        </Paper>
+          {/* Current Status */}
+          <div className="text-center mt-3">
+            <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${
+              currentStep >= 4 ? 'bg-green-900/30 text-green-400 border border-green-700' : 'bg-red-900/30 text-red-400 border border-red-700'
+            }`}>
+              {(order.status || 'pending').toUpperCase()}
+            </span>
+          </div>
+        </div>
 
-        {/* Order Items */}
-        <Paper 
-          elevation={2}
-          sx={{ 
-            p: { xs: 2, md: 3 },
-            borderRadius: 3,
-            background: 'linear-gradient(135deg, #f5f5f5 0%, #ffffff 100%)',
-          }}
-        >
-          <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: '#333', mb: 3 }}>
-            Order Items
-          </Typography>
-          
-          <Stack spacing={2}>
-            {items.map((item, index) => (
-              <Card 
-                key={index} 
-                elevation={1}
-                sx={{ 
-                  borderRadius: 2,
-                  border: '1px solid #e0e0e0',
-                  '&:hover': { 
-                    boxShadow: 2,
-                    borderColor: '#d32f2f',
-                  }
-                }}
-              >
-                <CardContent sx={{ py: 2, px: 3 }}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Box>
-                      <Typography variant="body1" sx={{ fontWeight: 600, color: '#333' }}>
-                        {item.name}
-                      </Typography>
-                      <Typography variant="body2" sx={{ color: '#666' }}>
-                        Quantity: {item.quantity}
-                      </Typography>
-                    </Box>
-                    <Typography variant="h6" sx={{ fontWeight: 700, color: '#d32f2f' }}>
-                      ₹{(parseFloat(item.price) * item.quantity).toFixed(2)}
-                    </Typography>
-                  </Box>
-                </CardContent>
-              </Card>
-            ))}
-          </Stack>
-        </Paper>
+        {/* Order Items - Compact */}
+        {items.length > 0 && (
+          <div className="bg-gray-800 rounded-2xl p-4 shadow-lg border border-gray-700">
+            <h2 className="text-lg font-bold text-gray-200 mb-3">Order Items</h2>
+            
+            <div className="space-y-2">
+              {items.map((item, index) => (
+                <div 
+                  key={index} 
+                  className="flex justify-between items-center p-3 bg-gray-700 rounded-lg border border-gray-600"
+                >
+                  <div className="flex-1">
+                    <p className="font-semibold text-gray-200 text-sm">{item.name}</p>
+                    <p className="text-gray-400 text-xs">Qty: {item.quantity}</p>
+                  </div>
+                  <p className="font-bold text-red-400 text-sm">
+                    ₹{(parseFloat(item.price) * item.quantity).toFixed(2)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Navigation Buttons */}
-        <Paper 
-          elevation={2}
-          sx={{ 
-            p: { xs: 2, md: 3 }, 
-            mt: 3,
-            borderRadius: 3,
-            background: 'linear-gradient(135deg, #f5f5f5 0%, #ffffff 100%)',
-          }}
-        >
-          <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: '#333', mb: 3 }}>
-            What would you like to do next?
-          </Typography>
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-            <Button 
-              variant="contained" 
+        <div className="bg-gray-800 rounded-2xl p-4 shadow-lg border border-gray-700">
+          <h2 className="text-lg font-bold text-gray-200 mb-3">What would you like to do next?</h2>
+          <div className="space-y-3">
+            <button 
               onClick={handleOrderMore}
-              startIcon={<CartIcon />}
-              sx={{ 
-                backgroundColor: '#d32f2f',
-                '&:hover': { backgroundColor: '#b71c1c' },
-                textTransform: 'none',
-                fontWeight: 600,
-                py: 1.5,
-              }}
+              className="w-full bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors"
             >
+              <CartIcon />
               Order More Food
-            </Button>
-            <Button 
-              variant="outlined" 
+            </button>
+            <button 
               onClick={() => window.history.back()}
-              startIcon={<BackIcon />}
-              sx={{ 
-                borderColor: '#d32f2f',
-                color: '#d32f2f',
-                '&:hover': { 
-                  borderColor: '#b71c1c',
-                  backgroundColor: 'rgba(211, 47, 47, 0.1)'
-                },
-                textTransform: 'none',
-                fontWeight: 600,
-                py: 1.5,
-              }}
+              className="w-full border border-red-500 text-red-500 hover:bg-red-500/10 font-semibold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors"
             >
+              <BackIcon />
               Go Back
-            </Button>
-            <Button 
-              variant="outlined" 
+            </button>
+            <button 
               onClick={() => window.location.href = '/'}
-              startIcon={<HomeIcon />}
-              sx={{ 
-                borderColor: '#666',
-                color: '#666',
-                '&:hover': { 
-                  borderColor: '#333',
-                  backgroundColor: 'rgba(0,0,0,0.1)'
-                },
-                textTransform: 'none',
-                fontWeight: 600,
-                py: 1.5,
-              }}
+              className="w-full border border-gray-600 text-gray-300 hover:bg-gray-700 font-semibold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors"
             >
+              <HomeIcon />
               Go to Home
-            </Button>
-          </Stack>
-        </Paper>
-      </Container>
-    </Box>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 };
 

@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import './App.css';
+import './app.css';
 // Components
 import Menu from './components/Menu';
 import Cart from './components/Cart';
@@ -14,18 +14,35 @@ import FloorManagement from './components/FloorManagement';
 import StaffManagement from './components/StaffManagement';
 import MenuManagement from './components/MenuManagement';
 import RoomManagement from './components/RoomManagement';
-import StaffPortal from './components/StaffPortal';
 import AdminHR from './components/AdminHR';
 import OrderManagement from './components/OrderManagement';
+import HRManagement from './components/HRManagement';
+import EmployeeManagement from './components/EmployeeManagement';
+import HRLogin from './components/HRLogin';
+import HRDashboard from './components/HRDashboard';
+import PayrollManagement from './components/PayrollManagement';
+import LeaveManagement from './components/LeaveManagement';
+import TrainingManagement from './components/TrainingManagement';
+import PerformanceManagement from './components/PerformanceManagement';
+import HRSetup from './components/HRSetup';
+import StaffLogin from './components/StaffLogin';
+import StaffPortal from './components/StaffPortal';
+import SuperAdminDashboard from './components/SuperAdminDashboard';
+import RestaurantManagement from './components/RestaurantManagement';
+import RoleManagement from './components/RoleManagement';
 import MyOrders from './components/MyOrders';
 import Reviews from './components/Reviews';
 import OrderTracking from './components/OrderTracking';
 import TableOrders from './components/TableOrders';
 import BillPortal from './components/BillPortal';
-import MainLayout from './components/MainLayout';
+import SocketTest from './components/SocketTest';
+import { AdminLayout, CustomerLayout, HRLayout, StaffLayout, SuperAdminLayout } from './components/RoleLayouts';
 
 // Context
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { SocketProvider } from './context/SocketContext';
+import { RestaurantProvider } from './context/RestaurantContext';
+import { RequireRole, RequirePermission } from './components/RequireRole';
 
 const theme = createTheme({
   palette: {
@@ -65,9 +82,13 @@ const App: React.FC = () => {
   return (
     <ThemeProvider theme={theme}>
       <AuthProvider>
-        <Router>
-          <AppContent />
-        </Router>
+        <RestaurantProvider>
+          <SocketProvider>
+            <Router>
+              <AppContent />
+            </Router>
+          </SocketProvider>
+        </RestaurantProvider>
       </AuthProvider>
     </ThemeProvider>
   );
@@ -86,151 +107,278 @@ const AppContent: React.FC = () => {
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
       
-      {/* Routes with MainLayout */}
+      {/* Customer routes with CustomerLayout */}
       <Route path="/" element={
-        <MainLayout>
+        <CustomerLayout>
           <Menu />
-        </MainLayout>
+        </CustomerLayout>
+      } />
+      <Route path="/r/:restaurantSlug" element={
+        <CustomerLayout>
+          <Menu />
+        </CustomerLayout>
       } />
       <Route path="/cart" element={
-        <MainLayout>
+        <CustomerLayout>
           <Cart />
-        </MainLayout>
+        </CustomerLayout>
+      } />
+      <Route path="/r/:restaurantSlug/cart" element={
+        <CustomerLayout>
+          <Cart />
+        </CustomerLayout>
       } />
       <Route path="/profile" element={
-        <MainLayout>
+        <CustomerLayout>
           <Profile />
-        </MainLayout>
+        </CustomerLayout>
       } />
       <Route path="/my-orders" element={
-        <MainLayout>
+        <CustomerLayout>
           <MyOrders />
-        </MainLayout>
+        </CustomerLayout>
       } />
       <Route path="/reviews" element={
-        <MainLayout>
+        <CustomerLayout>
           <Reviews />
-        </MainLayout>
+        </CustomerLayout>
       } />
       <Route path="/order-tracking/:orderId" element={
-        <MainLayout>
+        <CustomerLayout>
           <OrderTracking />
-        </MainLayout>
+        </CustomerLayout>
+      } />
+      <Route path="/r/:restaurantSlug/order-tracking/:orderId" element={
+        <CustomerLayout>
+          <OrderTracking />
+        </CustomerLayout>
       } />
       <Route path="/table-orders" element={
-        <MainLayout>
+        <CustomerLayout>
           <TableOrders />
-        </MainLayout>
+        </CustomerLayout>
+      } />
+      <Route path="/socket-test" element={
+        <CustomerLayout>
+          <SocketTest />
+        </CustomerLayout>
       } />
       <Route path="/bills" element={
-        <MainLayout>
+        <CustomerLayout>
           <BillPortal />
-        </MainLayout>
+        </CustomerLayout>
       } />
       
       {/* Admin routes */}
       <Route
         path="/dashboard"
         element={
-          user?.is_superuser || user?.cafe_manager ? (
-            <MainLayout>
+          <RequireRole roles={['super_admin', 'restaurant_admin', 'hr_manager', 'staff']}>
+            <AdminLayout>
               <Dashboard />
-            </MainLayout>
-          ) : (
-            <Navigate to="/login" />
-          )
+            </AdminLayout>
+          </RequireRole>
         }
       />
       <Route
         path="/manage-tables"
         element={
-          user?.is_superuser || user?.cafe_manager ? (
-            <MainLayout>
+          <RequirePermission permission="manage_tables">
+            <AdminLayout>
               <TableManagement />
-            </MainLayout>
-          ) : (
-            <Navigate to="/login" />
-          )
+            </AdminLayout>
+          </RequirePermission>
         }
       />
       <Route
         path="/manage-floors"
         element={
-          user?.is_superuser || user?.cafe_manager ? (
-            <MainLayout>
+          <RequirePermission permission="manage_floors">
+            <AdminLayout>
               <FloorManagement />
-            </MainLayout>
-          ) : (
-            <Navigate to="/login" />
-          )
+            </AdminLayout>
+          </RequirePermission>
         }
       />
       <Route
         path="/manage-staff"
         element={
-          user?.is_superuser || user?.cafe_manager ? (
-            <MainLayout>
+          <RequirePermission permission="manage_employees">
+            <AdminLayout>
               <StaffManagement />
-            </MainLayout>
-          ) : (
-            <Navigate to="/login" />
-          )
+            </AdminLayout>
+          </RequirePermission>
         }
       />
       <Route
         path="/manage-menu"
         element={
-          user?.is_superuser || user?.cafe_manager ? (
-            <MainLayout>
+          <RequirePermission permission="manage_menu">
+            <AdminLayout>
               <MenuManagement />
-            </MainLayout>
-          ) : (
-            <Navigate to="/login" />
-          )
+            </AdminLayout>
+          </RequirePermission>
         }
       />
       <Route
         path="/manage-rooms"
         element={
-          user?.is_superuser || user?.cafe_manager ? (
-            <MainLayout>
+          <RequirePermission permission="manage_rooms">
+            <AdminLayout>
               <RoomManagement />
-            </MainLayout>
-          ) : (
-            <Navigate to="/login" />
-          )
+            </AdminLayout>
+          </RequirePermission>
         }
       />
       <Route
         path="/staff-portal"
-        element={
-          <MainLayout>
-            <StaffPortal />
-          </MainLayout>
-        }
+        element={<StaffPortal />}
       />
       <Route
         path="/admin-hr"
         element={
-          user?.is_superuser || user?.cafe_manager ? (
-            <MainLayout>
+          <RequirePermission permission="manage_employees">
+            <AdminLayout>
               <AdminHR />
-            </MainLayout>
-          ) : (
-            <Navigate to="/login" />
-          )
+            </AdminLayout>
+          </RequirePermission>
         }
       />
       <Route
         path="/manage-orders"
         element={
-          user?.is_superuser || user?.cafe_manager ? (
-            <MainLayout>
+          <RequirePermission permission="manage_orders">
+            <AdminLayout>
               <OrderManagement />
-            </MainLayout>
-          ) : (
-            <Navigate to="/login" />
-          )
+            </AdminLayout>
+          </RequirePermission>
+        }
+      />
+      <Route
+        path="/hr-management"
+        element={
+          <RequirePermission permission="manage_employees">
+            <HRLayout>
+              <HRDashboard />
+            </HRLayout>
+          </RequirePermission>
+        }
+      />
+      <Route
+        path="/employee-management"
+        element={
+          <RequirePermission permission="manage_employees">
+            <HRLayout>
+              <EmployeeManagement />
+            </HRLayout>
+          </RequirePermission>
+        }
+      />
+      <Route
+        path="/payroll-management"
+        element={
+          <RequirePermission permission="manage_payroll">
+            <HRLayout>
+              <PayrollManagement />
+            </HRLayout>
+          </RequirePermission>
+        }
+      />
+      <Route
+        path="/attendance-management"
+        element={
+          <RequirePermission permission="manage_attendance">
+            <HRLayout>
+              <HRManagement showTabs={false} />
+            </HRLayout>
+          </RequirePermission>
+        }
+      />
+      <Route
+        path="/leave-management"
+        element={
+          <RequirePermission permission="manage_leaves">
+            <HRLayout>
+              <LeaveManagement />
+            </HRLayout>
+          </RequirePermission>
+        }
+      />
+      <Route
+        path="/training-management"
+        element={
+          <RequirePermission permission="manage_training">
+            <HRLayout>
+              <TrainingManagement />
+            </HRLayout>
+          </RequirePermission>
+        }
+      />
+      <Route
+        path="/performance-management"
+        element={
+          <RequirePermission permission="manage_performance">
+            <HRLayout>
+              <PerformanceManagement />
+            </HRLayout>
+          </RequirePermission>
+        }
+      />
+      <Route
+        path="/hr-setup"
+        element={
+          <RequireRole roles={['restaurant_admin', 'super_admin']}>
+            <AdminLayout>
+              <HRSetup />
+            </AdminLayout>
+          </RequireRole>
+        }
+      />
+      <Route
+        path="/staff-portal"
+        element={
+          <RequireRole roles={['staff', 'restaurant_admin', 'hr_manager', 'super_admin']}>
+            <StaffLayout>
+              <StaffPortal />
+            </StaffLayout>
+          </RequireRole>
+        }
+      />
+      
+      {/* HR System Routes */}
+      <Route path="/hr-login" element={<HRLogin />} />
+      <Route path="/hr-dashboard" element={<HRDashboard />} />
+      <Route path="/staff-login" element={<StaffLogin />} />
+      
+      {/* Super Admin Routes */}
+      <Route
+        path="/super-admin"
+        element={
+          <RequireRole roles={['super_admin']}>
+            <SuperAdminLayout>
+              <SuperAdminDashboard />
+            </SuperAdminLayout>
+          </RequireRole>
+        }
+      />
+      <Route
+        path="/manage-restaurants"
+        element={
+          <RequireRole roles={['super_admin']}>
+            <SuperAdminLayout>
+              <RestaurantManagement />
+            </SuperAdminLayout>
+          </RequireRole>
+        }
+      />
+      <Route
+        path="/role-management"
+        element={
+          <RequireRole roles={['super_admin']}>
+            <SuperAdminLayout>
+              <RoleManagement />
+            </SuperAdminLayout>
+          </RequireRole>
         }
       />
     </Routes>

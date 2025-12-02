@@ -1,4 +1,6 @@
 // User types
+export type UserRole = 'super_admin' | 'restaurant_admin' | 'hr_manager' | 'staff' | 'customer';
+
 export interface User {
   id: number;
   username: string;
@@ -7,8 +9,21 @@ export interface User {
   last_name: string;
   phone?: string;
   is_superuser: boolean;
+  is_super_admin?: boolean;
   cafe_manager?: boolean;
   staff_profile?: Staff;
+  role?: UserRole;
+  permissions?: string[];
+  restaurant?: {
+    id: number;
+    name: string;
+    slug: string;
+  };
+  available_restaurants?: Array<{
+    id: number;
+    name: string;
+    slug: string;
+  }>;
 }
 
 export interface Floor {
@@ -149,7 +164,7 @@ export interface MenuItem {
   description: string;
   image?: string;
   image_url?: string;
-  price: string;
+  price: number | string;
   list_order: number;
   is_available: boolean;
 }
@@ -162,6 +177,8 @@ export interface Order {
   table: string;
   price: string;
   status: string;
+  payment_status?: string;
+  payment_method?: string;
   estimated_time: number;
   created_at: string;
   updated_at: string;
@@ -217,6 +234,7 @@ export interface ApiResponse<T> {
 export interface LoginRequest {
   phone: string;
   password: string;
+  restaurant_slug?: string;
 }
 
 export interface SignupRequest {
@@ -253,7 +271,7 @@ export interface DashboardStats {
 export interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (credentials: LoginRequest) => Promise<void>;
+  login: (credentials: LoginRequest) => Promise<User>;
   signup: (userData: SignupRequest) => Promise<void>;
   logout: () => Promise<void>;
 }

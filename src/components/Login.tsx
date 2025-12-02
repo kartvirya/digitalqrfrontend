@@ -1,16 +1,23 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useRestaurant, Restaurant } from '../context/RestaurantContext';
 import { useNavigate } from 'react-router-dom';
+import apiService from '../services/api';
 
 const Login = () => {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [step, setStep] = useState<'credentials' | 'restaurant'>('credentials');
+  const [availableRestaurants, setAvailableRestaurants] = useState<Partial<Restaurant>[]>([]);
+  const [selectedRestaurantSlug, setSelectedRestaurantSlug] = useState('');
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const { login } = useAuth();
+  const { setRestaurant } = useRestaurant();
   const navigate = useNavigate();
 
-  const handleSubmit = async () => {
+  const handleCredentialsSubmit = async () => {
     if (!phone || !password) {
       setError('Please enter both phone number and password');
       return;
@@ -20,9 +27,20 @@ const Login = () => {
     setError('');
     
     try {
-      await login({ phone, password });
-      // Navigate to dashboard or home page after successful login
-      navigate('/dashboard');
+      // First, authenticate to get user info and available restaurants
+      const response = await apiService.login(phone, password);
+      const userData = response;
+      
+      // Check if user is super admin and has available restaurants
+      if ((userData.is_super_admin || userData.is_superuser) && userData.available_restaurants && userData.available_restaurants.length > 0) {
+        setIsSuperAdmin(true);
+        setAvailableRestaurants(userData.available_restaurants);
+        setStep('restaurant');
+      } else {
+        // Regular user or restaurant admin - complete login with their restaurant
+        // Restaurant admin will have restaurant in userData.restaurant
+        await handleCompleteLogin(userData.restaurant);
+      }
     } catch (error: any) {
       setError(error.response?.data?.error || error.message || 'Login failed. Please try again.');
     } finally {
@@ -30,9 +48,80 @@ const Login = () => {
     }
   };
 
+  const handleCompleteLogin = async (restaurant?: any) => {
+    try {
+      setLoading(true);
+      setError('');
+      
+      // Login with optional restaurant selection
+      const loginData: any = { phone, password };
+      if (selectedRestaurantSlug) {
+        loginData.restaurant_slug = selectedRestaurantSlug;
+      }
+      
+      const userData = await login(loginData);
+      
+      // Set restaurant context
+      if (restaurant || (userData as any).restaurant) {
+        const restaurantData = restaurant || (userData as any).restaurant;
+        if (restaurantData) {
+          setRestaurant({
+            id: restaurantData.id,
+            name: restaurantData.name,
+            slug: restaurantData.slug,
+            is_active: restaurantData.is_active,
+            subscription_status: restaurantData.subscription_status || 'active',
+            created_at: restaurantData.created_at || new Date().toISOString(),
+            updated_at: restaurantData.updated_at || new Date().toISOString(),
+          });
+        }
+      } else if (selectedRestaurantSlug && availableRestaurants.length > 0) {
+        const selectedRestaurant = availableRestaurants.find(r => r.slug === selectedRestaurantSlug);
+        if (selectedRestaurant && selectedRestaurant.id && selectedRestaurant.name && selectedRestaurant.slug) {
+          setRestaurant({
+            id: selectedRestaurant.id,
+            name: selectedRestaurant.name,
+            slug: selectedRestaurant.slug,
+            is_active: selectedRestaurant.is_active ?? true,
+            subscription_status: selectedRestaurant.subscription_status || 'active',
+            created_at: selectedRestaurant.created_at || new Date().toISOString(),
+            updated_at: selectedRestaurant.updated_at || new Date().toISOString(),
+          });
+        }
+      }
+      
+      // Small delay to ensure state is updated before navigation
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Navigate based on user type
+      if ((userData as any).is_super_admin || (userData as any).is_superuser) {
+        navigate('/super-admin', { replace: true });
+      } else {
+        navigate('/dashboard', { replace: true });
+      }
+    } catch (error: any) {
+      console.error('Login error:', error);
+      setError(error.response?.data?.error || error.message || 'Login failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRestaurantSelect = async () => {
+    if (!selectedRestaurantSlug) {
+      setError('Please select a restaurant');
+      return;
+    }
+    await handleCompleteLogin();
+  };
+
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
-      handleSubmit();
+      if (step === 'credentials') {
+        handleCredentialsSubmit();
+      } else {
+        handleRestaurantSelect();
+      }
     }
   };
 
@@ -53,7 +142,7 @@ const Login = () => {
 
         {/* Sign in heading */}
         <h1 className="text-white text-3xl font-semibold text-center mb-8">
-          Sign in
+          {step === 'restaurant' ? 'Select Restaurant' : 'Sign in'}
         </h1>
 
         {/* Login Form */}
@@ -64,46 +153,94 @@ const Login = () => {
             </div>
           )}
 
-          <div className="space-y-6">
-            {/* Phone Field */}
-            <div>
-              <label className="block text-white text-sm font-medium mb-3">
-                Phone Number
-              </label>
-              <input
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="Your phone number"
-                className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-gray-600 focus:ring-1 focus:ring-gray-600 transition-colors"
-              />
-            </div>
+          {step === 'credentials' ? (
+            <div className="space-y-6">
+              {/* Phone Field */}
+              <div>
+                <label className="block text-white text-sm font-medium mb-3">
+                  Phone Number
+                </label>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  placeholder="Your phone number"
+                  className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-gray-600 focus:ring-1 focus:ring-gray-600 transition-colors"
+                />
+              </div>
 
-            {/* Password Field */}
-            <div>
-              <label className="block text-white text-sm font-medium mb-3">
-                Password
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="Your password"
-                className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-gray-600 focus:ring-1 focus:ring-gray-600 transition-colors"
-              />
-            </div>
+              {/* Password Field */}
+              <div>
+                <label className="block text-white text-sm font-medium mb-3">
+                  Password
+                </label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  placeholder="Your password"
+                  className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-gray-600 focus:ring-1 focus:ring-gray-600 transition-colors"
+                />
+              </div>
 
-            {/* Continue Button */}
-            <button
-              onClick={handleSubmit}
-              disabled={loading}
-              className="w-full bg-white text-black py-3 rounded-lg font-medium hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-2 focus:ring-offset-gray-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? 'Signing in...' : 'Continue'}
-            </button>
-          </div>
+              {/* Continue Button */}
+              <button
+                onClick={handleCredentialsSubmit}
+                disabled={loading}
+                className="w-full bg-white text-black py-3 rounded-lg font-medium hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-2 focus:ring-offset-gray-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? 'Verifying...' : 'Continue'}
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Restaurant Selection */}
+              <div>
+                <label className="block text-white text-sm font-medium mb-3">
+                  Select Restaurant / Hotel
+                </label>
+                <select
+                  value={selectedRestaurantSlug}
+                  onChange={(e) => setSelectedRestaurantSlug(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-gray-600 focus:ring-1 focus:ring-gray-600 transition-colors"
+                >
+                  <option value="">-- Select a restaurant --</option>
+                  {availableRestaurants.map((restaurant) => (
+                    <option key={restaurant.id} value={restaurant.slug}>
+                      {restaurant.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-gray-400 text-xs mt-2">
+                  Choose which restaurant/hotel you want to manage
+                </p>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setStep('credentials');
+                    setError('');
+                  }}
+                  disabled={loading}
+                  className="flex-1 px-4 py-3 bg-gray-700 text-white rounded-lg font-medium hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-2 focus:ring-offset-gray-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Back
+                </button>
+                <button
+                  onClick={handleRestaurantSelect}
+                  disabled={loading || !selectedRestaurantSlug}
+                  className="flex-1 bg-white text-black py-3 rounded-lg font-medium hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-2 focus:ring-offset-gray-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? 'Signing in...' : 'Login'}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Divider */}
           <div className="flex items-center my-6">

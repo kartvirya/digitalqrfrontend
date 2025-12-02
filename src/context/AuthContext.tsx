@@ -19,18 +19,29 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const checkAuth = async () => {
     try {
       const currentUser = await apiService.getCurrentUser();
-      setUser(currentUser);
+      if (currentUser) {
+        setUser(currentUser);
+        
+        // If user has a restaurant, set it in restaurant context
+        if (currentUser?.restaurant) {
+          // Restaurant context will be set by RestaurantProvider
+        }
+      } else {
+        setUser(null);
+      }
     } catch (error) {
+      console.error('Auth check failed:', error);
       setUser(null);
     } finally {
       setLoading(false);
     }
   };
 
-  const login = async (credentials: LoginRequest): Promise<void> => {
+  const login = async (credentials: LoginRequest & { restaurant_slug?: string }): Promise<User> => {
     try {
-      const userData = await apiService.login(credentials.phone, credentials.password);
+      const userData = await apiService.login(credentials.phone, credentials.password, credentials.restaurant_slug);
       setUser(userData);
+      return userData;
     } catch (error) {
       throw error;
     }

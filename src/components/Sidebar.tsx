@@ -1,46 +1,34 @@
 import React, { useState } from 'react';
 import {
-  Box,
-  Drawer,
-  List,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  Divider,
-  Typography,
-  IconButton,
-  Button,
-  useMediaQuery,
-  useTheme,
-  Tooltip,
-} from '@mui/material';
-import {
-  Dashboard as DashboardIcon,
-  TableRestaurant as TableIcon,
-  Hotel as RoomIcon,
-  Business as FloorIcon,
-  People as StaffIcon,
-  Restaurant as RestaurantIcon,
-  Receipt as OrderIcon,
-  AccountCircle as ProfileIcon,
-  History as OrderHistoryIcon,
-  Logout as LogoutIcon,
-  Home as HomeIcon,
-  RateReview as ReviewIcon,
-  ShoppingCart as CartIcon,
-  Person as PersonIcon,
-  Login as LoginIcon,
-  PersonAdd as SignupIcon,
-  Work as HRIcon,
-  Receipt as ReceiptIcon,
-  Refresh as RefreshIcon,
-  Close as CloseIcon,
-  ExpandMore as ExpandMoreIcon,
-} from '@mui/icons-material';
+  HomeIcon,
+  BuildingOfficeIcon,
+  BuildingStorefrontIcon,
+  UserGroupIcon,
+  Squares2X2Icon,
+  ClipboardDocumentListIcon,
+  UserCircleIcon,
+  ClockIcon,
+  ArrowRightOnRectangleIcon,
+  ChatBubbleLeftRightIcon,
+  ShoppingCartIcon,
+  UserIcon,
+  ArrowLeftOnRectangleIcon,
+  UserPlusIcon,
+  BriefcaseIcon,
+  DocumentTextIcon,
+  ArrowPathIcon,
+  XMarkIcon,
+  ChevronDownIcon,
+  CurrencyDollarIcon,
+  CalendarDaysIcon,
+  AcademicCapIcon,
+  ChartBarIcon,
+} from '@heroicons/react/24/outline';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { usePermissions } from '../hooks/usePermissions';
 
-const drawerWidth = 260;
+const drawerWidth = 280;
 
 interface MenuItemConfig {
   label: string;
@@ -54,40 +42,60 @@ interface SidebarProps {
 }
 
 const mainNavigationItems: MenuItemConfig[] = [
-  { label: 'Overview', icon: <RefreshIcon />, path: '/dashboard' },
+  { label: 'Overview', icon: <ArrowPathIcon className="w-5 h-5" />, path: '/dashboard' },
 ];
 
 const customerItems: MenuItemConfig[] = [
-  { label: 'Menu', icon: <HomeIcon />, path: '/' },
-  { label: 'Reviews', icon: <ReviewIcon />, path: '/reviews' },
-  { label: 'Cart', icon: <CartIcon />, path: '/cart' },
+  { label: 'Menu', icon: <HomeIcon className="w-5 h-5" />, path: '/' },
+  { label: 'Reviews', icon: <ChatBubbleLeftRightIcon className="w-5 h-5" />, path: '/reviews' },
+  { label: 'Cart', icon: <ShoppingCartIcon className="w-5 h-5" />, path: '/cart' },
+];
+
+const superAdminItems: MenuItemConfig[] = [
+  { label: 'Super Admin Dashboard', icon: <ChartBarIcon className="w-5 h-5" />, path: '/super-admin' },
+  { label: 'Restaurant Management', icon: <BuildingStorefrontIcon className="w-5 h-5" />, path: '/manage-restaurants' },
+  { label: 'Role Management', icon: <UserGroupIcon className="w-5 h-5" />, path: '/role-management' },
 ];
 
 const adminItems: MenuItemConfig[] = [
-  { label: 'Tables', icon: <TableIcon />, path: '/manage-tables' },
-  { label: 'Rooms', icon: <RoomIcon />, path: '/manage-rooms' },
-  { label: 'Floors', icon: <FloorIcon />, path: '/manage-floors' },
-  { label: 'Staff', icon: <StaffIcon />, path: '/manage-staff' },
-  { label: 'Menu Management', icon: <RestaurantIcon />, path: '/manage-menu' },
-  { label: 'Staff Portal', icon: <DashboardIcon />, path: '/staff-portal' },
-  { label: 'HR Admin', icon: <HRIcon />, path: '/admin-hr' },
-  { label: 'Orders', icon: <OrderIcon />, path: '/manage-orders' },
+  { label: 'Tables', icon: <Squares2X2Icon className="w-5 h-5" />, path: '/manage-tables' },
+  { label: 'Rooms', icon: <BuildingOfficeIcon className="w-5 h-5" />, path: '/manage-rooms' },
+  { label: 'Floors', icon: <BuildingStorefrontIcon className="w-5 h-5" />, path: '/manage-floors' },
+  { label: 'Menu Management', icon: <ClipboardDocumentListIcon className="w-5 h-5" />, path: '/manage-menu' },
+  { label: 'Orders', icon: <ClipboardDocumentListIcon className="w-5 h-5" />, path: '/manage-orders' },
+];
+
+const hrItems: MenuItemConfig[] = [
+  { label: 'HR Overview', icon: <ChartBarIcon className="w-5 h-5" />, path: '/hr-management' },
+  { label: 'Employees', icon: <UserGroupIcon className="w-5 h-5" />, path: '/employee-management' },
+  { label: 'Payroll', icon: <CurrencyDollarIcon className="w-5 h-5" />, path: '/payroll-management' },
+  { label: 'Attendance', icon: <CalendarDaysIcon className="w-5 h-5" />, path: '/attendance-management' },
+  { label: 'Leaves', icon: <CalendarDaysIcon className="w-5 h-5" />, path: '/leave-management' },
+  { label: 'Training', icon: <AcademicCapIcon className="w-5 h-5" />, path: '/training-management' },
+  { label: 'Performance', icon: <ChartBarIcon className="w-5 h-5" />, path: '/performance-management' },
+];
+
+const hrSetupItem: MenuItemConfig[] = [
+  { label: 'HR Setup', icon: <UserPlusIcon className="w-5 h-5" />, path: '/hr-setup' },
+];
+
+const staffItems: MenuItemConfig[] = [
+  { label: 'Staff Portal', icon: <Squares2X2Icon className="w-5 h-5" />, path: '/staff-portal' },
 ];
 
 const userItems: MenuItemConfig[] = [
-  { label: 'Profile', icon: <ProfileIcon />, path: '/profile' },
-  { label: 'My Orders', icon: <OrderHistoryIcon />, path: '/my-orders' },
-  { label: 'Table Orders', icon: <OrderIcon />, path: '/table-orders' },
-  { label: 'Bills', icon: <ReceiptIcon />, path: '/bills' },
+  { label: 'Profile', icon: <UserCircleIcon className="w-5 h-5" />, path: '/profile' },
+  { label: 'My Orders', icon: <ClockIcon className="w-5 h-5" />, path: '/my-orders' },
+  { label: 'Table Orders', icon: <ClipboardDocumentListIcon className="w-5 h-5" />, path: '/table-orders' },
+  { label: 'Bills', icon: <DocumentTextIcon className="w-5 h-5" />, path: '/bills' },
 ];
 
 const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onDrawerToggle }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['main']));
+  const { user } = useAuth();
+  const { hasRole } = usePermissions();
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['main', 'customer']));
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -101,354 +109,203 @@ const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onDrawerToggle }) => {
     setExpandedSections(newExpanded);
   };
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-      navigate('/login');
-    } catch (error) {
-      console.error('Logout failed:', error);
-    }
-  };
-
   const SectionHeader = ({ title, section }: { title: string; section: string }) => (
-    <ListItemButton
+    <button
       onClick={() => toggleSection(section)}
-      sx={{
-        py: 1,
-        px: 2,
-        minHeight: 'auto',
-        '&:hover': {
-          backgroundColor: 'transparent',
-        },
-      }}
+      className="w-full flex items-center justify-between py-3 px-4 text-left hover:bg-gray-700/50 rounded-lg transition-colors duration-200 group"
     >
-      <Typography
-        variant="caption"
-        sx={{
-          color: '#9ca3af',
-          fontSize: '11px',
-          fontWeight: 600,
-          textTransform: 'uppercase',
-          letterSpacing: '0.5px',
-          flexGrow: 1,
-        }}
-      >
+      <span className="text-gray-300 text-sm font-semibold uppercase tracking-wider">
         {title}
-      </Typography>
-      <IconButton
-        size="small"
-        sx={{
-          color: '#9ca3af',
-          p: 0,
-          transform: expandedSections.has(section) ? 'rotate(180deg)' : 'rotate(0deg)',
-          transition: 'transform 0.2s ease',
-        }}
-      >
-        <ExpandMoreIcon sx={{ fontSize: 16 }} />
-      </IconButton>
-    </ListItemButton>
+      </span>
+      <ChevronDownIcon 
+        className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
+          expandedSections.has(section) ? 'rotate-180' : ''
+        }`} 
+      />
+    </button>
   );
 
   const MenuItem = ({ item }: { item: MenuItemConfig }) => (
-    <Tooltip title={item.label} placement="right" arrow>
-      <ListItemButton
-        onClick={() => navigate(item.path)}
-        selected={isActive(item.path)}
-        sx={{
-          mx: 1.5,
-          mb: 0.5,
-          borderRadius: '6px',
-          minHeight: '32px',
-          px: 1.5,
-          py: 0.5,
-          color: isActive(item.path) ? '#ffffff' : '#e5e7eb',
-          backgroundColor: isActive(item.path) ? '#4b5563' : 'transparent',
-          '&.Mui-selected': {
-            backgroundColor: '#4b5563',
-            color: '#ffffff',
-            '&:hover': {
-              backgroundColor: '#6b7280',
-            },
-          },
-          '&:hover': {
-            backgroundColor: isActive(item.path) ? '#6b7280' : 'rgba(229, 231, 235, 0.1)',
-            color: isActive(item.path) ? '#ffffff' : '#f9fafb',
-          },
-          transition: 'all 0.15s ease',
-        }}
-      >
-        <ListItemIcon 
-          sx={{ 
-            color: 'inherit',
-            minWidth: '20px',
-            mr: 1,
-            '& .MuiSvgIcon-root': {
-              fontSize: '16px',
-            }
-          }}
-        >
-          {item.icon}
-        </ListItemIcon>
-        <ListItemText 
-          primary={item.label}
-          primaryTypographyProps={{
-            fontSize: '13px',
-            fontWeight: isActive(item.path) ? 500 : 400,
-          }}
-        />
-      </ListItemButton>
-    </Tooltip>
+    <button
+      onClick={() => navigate(item.path)}
+      className={`w-full flex items-center gap-3 px-4 py-3 text-sm rounded-lg transition-all duration-200 group ${
+        isActive(item.path)
+          ? 'bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg'
+          : 'text-gray-300 hover:bg-gray-700/50 hover:text-white'
+      }`}
+    >
+      <div className={`transition-colors duration-200 ${
+        isActive(item.path) ? 'text-white' : 'text-gray-400 group-hover:text-white'
+      }`}>
+        {item.icon}
+      </div>
+      <span className="font-medium">{item.label}</span>
+    </button>
   );
 
+  // Determine primary role for sidebar behavior
+  const isSuperAdmin =
+    !!user && (hasRole('super_admin') || user.is_super_admin || user.is_superuser);
+  const isRestaurantAdminOnly =
+    !!user && !isSuperAdmin && (hasRole('restaurant_admin') || user.cafe_manager);
+  const isHRManagerOnly =
+    !!user && !isSuperAdmin && !isRestaurantAdminOnly && hasRole('hr_manager');
+  const isStaffOnly =
+    !!user && !isSuperAdmin && !isRestaurantAdminOnly && !isHRManagerOnly && hasRole('staff');
+  const isCustomerOnly =
+    !!user &&
+    !isSuperAdmin &&
+    !isRestaurantAdminOnly &&
+    !isHRManagerOnly &&
+    !isStaffOnly &&
+    (hasRole('customer') || !user.role);
+
   return (
-    <Drawer
-      variant={isMobile ? "temporary" : "permanent"}
-      open={isMobile ? mobileOpen : true}
-      onClose={onDrawerToggle}
-      ModalProps={{
-        keepMounted: true,
-      }}
-      PaperProps={{
-        sx: {
-          width: drawerWidth,
-          backgroundColor: '#1f2937',
-          borderRight: '1px solid #374151',
-          boxShadow: 'none',
-        },
-      }}
-    >
-      {/* Header */}
-      <Box sx={{ 
-        p: 2, 
-        pb: 1.5,
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'space-between',
-        borderBottom: '1px solid #374151',
-      }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Box sx={{ 
-            width: 24, 
-            height: 24, 
-            backgroundColor: '#f59e0b', 
-            borderRadius: '4px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}>
-            <Typography variant="caption" sx={{ 
-              color: '#ffffff', 
-              fontWeight: 700, 
-              fontSize: '12px',
-              lineHeight: 1,
-            }}>
-              R
-            </Typography>
-          </Box>
-          <Typography variant="body2" sx={{ 
-            color: '#f9fafb', 
-            fontWeight: 600, 
-            fontSize: '14px',
-          }}>
-            Restaurant
-          </Typography>
-        </Box>
-        {isMobile && (
-          <IconButton
-            onClick={onDrawerToggle}
-            size="small"
-            sx={{ color: '#9ca3af' }}
-          >
-            <CloseIcon sx={{ fontSize: 18 }} />
-          </IconButton>
-        )}
-      </Box>
+    <>
+      {/* Mobile Overlay */}
+      {mobileOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={onDrawerToggle}
+        />
+      )}
 
-      {/* Navigation */}
-      <Box sx={{ flexGrow: 1, overflow: 'auto', py: 1 }}>
-        <List sx={{ py: 0 }}>
+      {/* Sidebar */}
+      <div 
+        className={`
+          fixed top-0 left-0 h-full w-72 bg-gradient-to-b from-gray-800 to-gray-900 border-r border-gray-700/50 z-50 transform transition-transform duration-300 ease-in-out flex flex-col shadow-2xl overflow-hidden
+          ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
+          md:translate-x-0 md:fixed md:z-50
+        `}
+        style={{ zIndex: 9999 }}
+      >
+        {/* Header - Fixed */}
+        <div className="flex items-center justify-between p-6 border-b border-gray-700/50 bg-gray-800/50 backdrop-blur-sm flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl flex items-center justify-center shadow-lg">
+              <span className="text-white font-bold text-lg">R</span>
+            </div>
+            <div>
+              <h1 className="text-white font-bold text-lg">Restaurant</h1>
+              <p className="text-gray-400 text-xs">Management System</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Navigation - Scrollable */}
+        <div className="flex-1 overflow-y-auto py-6 px-4 space-y-6">
           {/* Main Navigation */}
-          {expandedSections.has('main') && (
-            <>
-              {mainNavigationItems.map((item) => (
-                <MenuItem key={item.label} item={item} />
-              ))}
-              <Box sx={{ height: 8 }} />
-            </>
-          )}
+          <div>
+            <SectionHeader title="Main" section="main" />
+            {expandedSections.has('main') && (
+              <div className="mt-3 space-y-1">
+                {mainNavigationItems.map((item) => (
+                  <MenuItem key={item.label} item={item} />
+                ))}
+              </div>
+            )}
+          </div>
 
-          {/* Customer Section */}
-          {!(user?.is_superuser || user?.cafe_manager) && (
-            <>
+          {/* Customer Section - Only for pure customers */}
+          {isCustomerOnly && (
+            <div>
               <SectionHeader title="Browse" section="customer" />
               {expandedSections.has('customer') && (
-                <>
+                <div className="mt-3 space-y-1">
                   {customerItems.map((item) => (
                     <MenuItem key={item.label} item={item} />
                   ))}
-                  <Box sx={{ height: 8 }} />
-                </>
+                </div>
               )}
-            </>
+            </div>
           )}
 
-          {/* Admin Section */}
-          {(user?.is_superuser || user?.cafe_manager) && (
-            <>
+          {/* Super Admin Section - Only for super admins */}
+          {isSuperAdmin && (
+            <div>
+              <SectionHeader title="Super Admin" section="superadmin" />
+              {expandedSections.has('superadmin') && (
+                <div className="mt-3 space-y-1">
+                  {superAdminItems.map((item) => (
+                    <MenuItem key={item.label} item={item} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Management Section - For Restaurant Admins */}
+          {isRestaurantAdminOnly && (
+            <div>
               <SectionHeader title="Management" section="admin" />
               {expandedSections.has('admin') && (
-                <>
+                <div className="mt-3 space-y-1">
                   {adminItems.map((item) => (
                     <MenuItem key={item.label} item={item} />
                   ))}
-                  <Box sx={{ height: 8 }} />
-                </>
+                </div>
               )}
-            </>
+            </div>
+          )}
+
+          {/* HR Section - For HR Managers and Restaurant Admins */}
+          {(isRestaurantAdminOnly || isHRManagerOnly) && (
+            <div>
+              <SectionHeader title="Human Resources" section="hr" />
+              {expandedSections.has('hr') && (
+                <div className="mt-3 space-y-1">
+                  {hrItems.map((item) => (
+                    <MenuItem key={item.label} item={item} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* HR Setup - For Restaurant Admins who haven't set up HR yet */}
+          {isRestaurantAdminOnly && !isHRManagerOnly && (
+            <div>
+              <SectionHeader title="HR Setup" section="hr-setup" />
+              {expandedSections.has('hr-setup') && (
+                <div className="mt-3 space-y-1">
+                  {hrSetupItem.map((item) => (
+                    <MenuItem key={item.label} item={item} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Staff Section - For Staff members */}
+          {isStaffOnly && (
+            <div>
+              <SectionHeader title="Staff" section="staff" />
+              {expandedSections.has('staff') && (
+                <div className="mt-3 space-y-1">
+                  {staffItems.map((item) => (
+                    <MenuItem key={item.label} item={item} />
+                  ))}
+                </div>
+              )}
+            </div>
           )}
 
           {/* User Section */}
           {user && (
-            <>
+            <div>
               <SectionHeader title="Account" section="user" />
               {expandedSections.has('user') && (
-                <>
+                <div className="mt-3 space-y-1">
                   {userItems.map((item) => (
                     <MenuItem key={item.label} item={item} />
                   ))}
-                  <Box sx={{ height: 8 }} />
-                </>
+                </div>
               )}
-            </>
+            </div>
           )}
-        </List>
-      </Box>
-
-      {/* Bottom Section */}
-      <Box sx={{ 
-        p: 2, 
-        pt: 1,
-        borderTop: '1px solid #374151',
-        backgroundColor: '#111827',
-      }}>
-        {user ? (
-          <Box>
-            {/* User Info */}
-            <Box sx={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: 1.5, 
-              mb: 1.5,
-              p: 1,
-              borderRadius: '6px',
-              backgroundColor: '#1f2937',
-              border: '1px solid #374151',
-            }}>
-              <Box sx={{
-                width: 28,
-                height: 28,
-                borderRadius: '50%',
-                backgroundColor: '#374151',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}>
-                <PersonIcon sx={{ fontSize: 16, color: '#9ca3af' }} />
-              </Box>
-              <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                <Typography variant="body2" sx={{ 
-                  fontSize: '13px', 
-                  fontWeight: 500, 
-                  color: '#f9fafb',
-                  lineHeight: 1.2,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}>
-                  {user.username}
-                </Typography>
-                <Typography variant="caption" sx={{ 
-                  fontSize: '11px', 
-                  color: '#9ca3af',
-                  lineHeight: 1.2,
-                }}>
-                  {user.is_superuser ? 'Admin' : user.cafe_manager ? 'Manager' : 'Customer'}
-                </Typography>
-              </Box>
-            </Box>
-
-            {/* Logout Button */}
-            <Button
-              fullWidth
-              onClick={handleLogout}
-              startIcon={<LogoutIcon sx={{ fontSize: 16 }} />}
-              sx={{
-                color: '#9ca3af',
-                fontSize: '13px',
-                fontWeight: 400,
-                textTransform: 'none',
-                justifyContent: 'flex-start',
-                px: 1.5,
-                py: 0.75,
-                minHeight: '32px',
-                borderRadius: '6px',
-                '&:hover': {
-                  backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                  color: '#f87171',
-                },
-              }}
-            >
-              Sign out
-            </Button>
-          </Box>
-        ) : (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            <Button
-              fullWidth
-              variant="outlined"
-              startIcon={<LoginIcon sx={{ fontSize: 16 }} />}
-              onClick={() => navigate('/login')}
-              sx={{
-                color: '#9ca3af',
-                borderColor: '#4b5563',
-                fontSize: '13px',
-                textTransform: 'none',
-                py: 0.75,
-                minHeight: '32px',
-                borderRadius: '6px',
-                '&:hover': {
-                  borderColor: '#6b7280',
-                  backgroundColor: 'rgba(156, 163, 175, 0.1)',
-                },
-              }}
-            >
-              Sign in
-            </Button>
-            <Button
-              fullWidth
-              variant="contained"
-              startIcon={<SignupIcon sx={{ fontSize: 16 }} />}
-              onClick={() => navigate('/signup')}
-              sx={{
-                backgroundColor: '#f59e0b',
-                fontSize: '13px',
-                textTransform: 'none',
-                py: 0.75,
-                minHeight: '32px',
-                borderRadius: '6px',
-                boxShadow: 'none',
-                '&:hover': {
-                  backgroundColor: '#d97706',
-                  boxShadow: 'none',
-                },
-              }}
-            >
-              Sign up
-            </Button>
-          </Box>
-        )}
-      </Box>
-    </Drawer>
+        </div>
+      </div>
+    </>
   );
 };
 

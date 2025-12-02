@@ -50,11 +50,18 @@ interface Bill {
   table_number?: string;
 }
 
+interface MenuItem {
+  id: number;
+  name: string;
+  price: string;
+}
+
 const BillPortal: React.FC = () => {
   const [bills, setBills] = useState<Bill[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
 
   const theme = useTheme();
   const [searchParams] = useSearchParams();
@@ -64,7 +71,17 @@ const BillPortal: React.FC = () => {
 
   useEffect(() => {
     loadBills();
+    loadMenuItems();
   }, [tableUniqueId, roomUniqueId]);
+
+  const loadMenuItems = async () => {
+    try {
+      const items = await apiService.getMenuItems();
+      setMenuItems(items);
+    } catch (error) {
+      console.error('Failed to load menu items:', error);
+    }
+  };
 
   const loadBills = async () => {
     try {
@@ -88,26 +105,51 @@ const BillPortal: React.FC = () => {
     }
   };
 
+  const getItemName = (itemId: string): string => {
+    const menuItem = menuItems.find(item => item.id.toString() === itemId);
+    return menuItem ? menuItem.name : `Item ${itemId}`;
+  };
+
   const parseBillItems = (items: Record<string, [number, string]>): BillItem[] => {
     try {
-      return Object.entries(items).map(([name, data]) => ({
-        name,
-        quantity: data[0],
-        total: parseInt(data[1])
-      }));
-    } catch {
+      return Object.entries(items).map(([itemId, data]) => {
+        const quantity = data[0];
+        const totalString = data[1];
+        
+        // Handle different formats of total price
+        let total: number;
+        if (typeof totalString === 'string') {
+          // Remove any non-numeric characters except decimal point
+          const cleanTotal = totalString.replace(/[^\d.]/g, '');
+          total = parseFloat(cleanTotal) || 0;
+        } else {
+          total = parseFloat(totalString) || 0;
+        }
+        
+        return {
+          name: getItemName(itemId),
+          quantity: quantity || 0,
+          total: total
+        };
+      }).filter(item => item.quantity > 0);
+    } catch (error) {
+      console.error('Error parsing bill items:', error);
       return [];
     }
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString('en-IN', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    try {
+      return new Date(dateString).toLocaleString('en-IN', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return 'Invalid Date';
+    }
   };
 
   const handlePrint = (bill: Bill) => {
@@ -121,14 +163,14 @@ const BillPortal: React.FC = () => {
           <head>
             <title>Bill #${bill.id}</title>
             <style>
-              body { font-family: Arial, sans-serif; margin: 20px; }
+              body { font-family: Arial, sans-serif; margin: 20px; background-color: #1a1a1a; color: #ffffff; }
               .header { text-align: center; margin-bottom: 30px; }
               .bill-info { margin-bottom: 20px; }
               table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-              th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-              th { background-color: #f2f2f2; }
-              .total { font-weight: bold; font-size: 18px; text-align: right; }
-              .footer { margin-top: 30px; text-align: center; font-size: 12px; color: #666; }
+              th, td { border: 1px solid #333; padding: 8px; text-align: left; }
+              th { background-color: #d32f2f; color: white; }
+              .total { font-weight: bold; font-size: 18px; text-align: right; color: #d32f2f; }
+              .footer { margin-top: 30px; text-align: center; font-size: 12px; color: #999; }
             </style>
           </head>
           <body>
@@ -157,14 +199,14 @@ const BillPortal: React.FC = () => {
                   <tr>
                     <td>${item.name}</td>
                     <td>${item.quantity}</td>
-                    <td>${item.total}</td>
+                    <td>₹${item.total.toFixed(2)}</td>
                   </tr>
                 `).join('')}
               </tbody>
             </table>
             
             <div class="total">
-              <strong>Total Amount: ₹${total}</strong>
+              <strong>Total Amount: ₹${total.toFixed(2)}</strong>
             </div>
             
             <div class="footer">
@@ -193,14 +235,14 @@ const BillPortal: React.FC = () => {
           flexDirection: 'column',
           justifyContent: 'center',
           alignItems: 'center',
-          backgroundColor: '#f8f9fa',
+          backgroundColor: 'var(--bg-primary)',
         }}
       >
-        <CircularProgress size={80} sx={{ color: '#d32f2f', mb: 3 }} />
-        <Typography variant="h5" sx={{ color: '#333', fontWeight: 600, mb: 1 }}>
+        <CircularProgress size={80} sx={{ color: 'var(--accent-red)', mb: 3 }} />
+        <Typography variant="h5" sx={{ color: 'var(--text-primary)', fontWeight: 600, mb: 1 }}>
           Loading Bills...
         </Typography>
-        <Typography variant="body1" sx={{ color: '#666' }}>
+        <Typography variant="body1" sx={{ color: 'var(--text-secondary)' }}>
           Preparing your billing information
         </Typography>
       </Box>
@@ -212,13 +254,13 @@ const BillPortal: React.FC = () => {
     const total = items.reduce((sum, item) => sum + item.total, 0);
 
     return (
-      <Box sx={{ minHeight: '100vh', backgroundColor: '#f8f9fa' }}>
+      <Box sx={{ minHeight: '100vh', backgroundColor: 'var(--bg-primary)' }}>
         <AppBar 
           position="sticky" 
           elevation={1}
           sx={{ 
-            backgroundColor: '#d32f2f',
-            boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+            backgroundColor: 'var(--accent-red)',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
           }}
         >
           <Toolbar>
@@ -252,7 +294,8 @@ const BillPortal: React.FC = () => {
             sx={{ 
               p: { xs: 2, md: 4 }, 
               borderRadius: 3,
-              background: 'linear-gradient(135deg, #f5f5f5 0%, #ffffff 100%)',
+              background: 'var(--bg-secondary)',
+              border: '1px solid var(--border-color)',
             }}
           >
             {/* Bill Header */}
@@ -263,15 +306,15 @@ const BillPortal: React.FC = () => {
                   height: 80, 
                   mx: 'auto', 
                   mb: 2,
-                  backgroundColor: '#d32f2f',
+                  backgroundColor: 'var(--accent-red)',
                 }}
               >
                 <ReceiptIcon sx={{ fontSize: 40 }} />
               </Avatar>
-              <Typography variant="h4" sx={{ fontWeight: 700, color: '#333', mb: 1 }}>
+              <Typography variant="h4" sx={{ fontWeight: 700, color: 'var(--text-primary)', mb: 1 }}>
                 Restaurant Bill
               </Typography>
-              <Typography variant="h6" sx={{ color: '#666' }}>
+              <Typography variant="h6" sx={{ color: 'var(--text-secondary)' }}>
                 Invoice #{selectedBill.id}
               </Typography>
             </Box>
@@ -285,20 +328,20 @@ const BillPortal: React.FC = () => {
                 mb: 3 
               }}>
                 <Box>
-                  <Typography variant="body2" sx={{ color: '#666', mb: 1 }}>
+                  <Typography variant="body2" sx={{ color: 'var(--text-secondary)', mb: 1 }}>
                     Date & Time
                   </Typography>
-                  <Typography variant="body1" sx={{ fontWeight: 600, color: '#333' }}>
+                  <Typography variant="body1" sx={{ fontWeight: 600, color: 'var(--text-primary)' }}>
                     {formatDate(selectedBill.bill_time)}
                   </Typography>
                 </Box>
                 
                 {selectedBill.name !== 'Unknown' && (
                   <Box>
-                    <Typography variant="body2" sx={{ color: '#666', mb: 1 }}>
+                    <Typography variant="body2" sx={{ color: 'var(--text-secondary)', mb: 1 }}>
                       Customer Name
                     </Typography>
-                    <Typography variant="body1" sx={{ fontWeight: 600, color: '#333' }}>
+                    <Typography variant="body1" sx={{ fontWeight: 600, color: 'var(--text-primary)' }}>
                       {selectedBill.name}
                     </Typography>
                   </Box>
@@ -306,10 +349,10 @@ const BillPortal: React.FC = () => {
                 
                 {selectedBill.phone !== '0000000000' && (
                   <Box>
-                    <Typography variant="body2" sx={{ color: '#666', mb: 1 }}>
+                    <Typography variant="body2" sx={{ color: 'var(--text-secondary)', mb: 1 }}>
                       Phone Number
                     </Typography>
-                    <Typography variant="body1" sx={{ fontWeight: 600, color: '#333' }}>
+                    <Typography variant="body1" sx={{ fontWeight: 600, color: 'var(--text-primary)' }}>
                       {selectedBill.phone}
                     </Typography>
                   </Box>
@@ -317,10 +360,10 @@ const BillPortal: React.FC = () => {
                 
                 {selectedBill.table_number && (
                   <Box>
-                    <Typography variant="body2" sx={{ color: '#666', mb: 1 }}>
+                    <Typography variant="body2" sx={{ color: 'var(--text-secondary)', mb: 1 }}>
                       Table Number
                     </Typography>
-                    <Typography variant="body1" sx={{ fontWeight: 600, color: '#333' }}>
+                    <Typography variant="body1" sx={{ fontWeight: 600, color: 'var(--text-primary)' }}>
                       {selectedBill.table_number}
                     </Typography>
                   </Box>
@@ -328,50 +371,60 @@ const BillPortal: React.FC = () => {
               </Box>
             </Box>
 
-            <Divider sx={{ my: 3 }} />
+            <Divider sx={{ my: 3, borderColor: 'var(--border-color)' }} />
 
             {/* Bill Items */}
             <Box sx={{ mb: 4 }}>
-              <Typography variant="h6" sx={{ fontWeight: 600, color: '#333', mb: 3 }}>
+              <Typography variant="h6" sx={{ fontWeight: 600, color: 'var(--text-primary)', mb: 3 }}>
                 Order Items
               </Typography>
               
-              <TableContainer component={Paper} elevation={1} sx={{ borderRadius: 2 }}>
-                <Table>
-                  <TableHead>
-                    <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
-                      <TableCell sx={{ fontWeight: 600, color: '#333' }}>Item</TableCell>
-                      <TableCell sx={{ fontWeight: 600, color: '#333' }} align="center">Quantity</TableCell>
-                      <TableCell sx={{ fontWeight: 600, color: '#333' }} align="right">Total (₹)</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {items.map((item, index) => (
-                      <TableRow 
-                        key={index} 
-                        sx={{ 
-                          '&:nth-of-type(odd)': { backgroundColor: '#fafafa' },
-                          '&:hover': { backgroundColor: '#f0f0f0' }
-                        }}
-                      >
-                        <TableCell sx={{ fontWeight: 500, color: '#333' }}>{item.name}</TableCell>
-                        <TableCell align="center">{item.quantity}</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 600, color: '#d32f2f' }}>
-                          ₹{item.total}
-                        </TableCell>
+              {items.length === 0 ? (
+                <Alert severity="warning" sx={{ borderRadius: 2 }}>
+                  No order items found for this bill.
+                </Alert>
+              ) : (
+                <TableContainer component={Paper} elevation={1} sx={{ 
+                  borderRadius: 2,
+                  backgroundColor: 'var(--bg-primary)',
+                  border: '1px solid var(--border-color)',
+                }}>
+                  <Table>
+                    <TableHead>
+                      <TableRow sx={{ backgroundColor: 'var(--accent-red)' }}>
+                        <TableCell sx={{ fontWeight: 600, color: 'white' }}>Item</TableCell>
+                        <TableCell sx={{ fontWeight: 600, color: 'white' }} align="center">Quantity</TableCell>
+                        <TableCell sx={{ fontWeight: 600, color: 'white' }} align="right">Total (₹)</TableCell>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+                    </TableHead>
+                    <TableBody>
+                      {items.map((item, index) => (
+                        <TableRow 
+                          key={index} 
+                          sx={{ 
+                            '&:nth-of-type(odd)': { backgroundColor: 'var(--bg-secondary)' },
+                            '&:hover': { backgroundColor: 'var(--hover-color)' }
+                          }}
+                        >
+                          <TableCell sx={{ fontWeight: 500, color: 'var(--text-primary)' }}>{item.name}</TableCell>
+                          <TableCell align="center" sx={{ color: 'var(--text-primary)' }}>{item.quantity}</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 600, color: 'var(--accent-red)' }}>
+                            ₹{item.total.toFixed(2)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              )}
             </Box>
 
-            <Divider sx={{ my: 3 }} />
+            <Divider sx={{ my: 3, borderColor: 'var(--border-color)' }} />
 
             {/* Total */}
             <Box sx={{ textAlign: 'right', mb: 4 }}>
-              <Typography variant="h4" sx={{ fontWeight: 700, color: '#d32f2f' }}>
-                Total: ₹{total}
+              <Typography variant="h4" sx={{ fontWeight: 700, color: 'var(--accent-red)' }}>
+                Total: ₹{total.toFixed(2)}
               </Typography>
             </Box>
 
@@ -384,8 +437,8 @@ const BillPortal: React.FC = () => {
                 sx={{
                   borderRadius: 2,
                   fontWeight: 600,
-                  backgroundColor: '#d32f2f',
-                  '&:hover': { backgroundColor: '#b71c1c' },
+                  backgroundColor: 'var(--accent-red)',
+                  '&:hover': { backgroundColor: 'var(--accent-red-dark)' },
                   textTransform: 'none',
                   py: 1.5,
                 }}
@@ -400,11 +453,11 @@ const BillPortal: React.FC = () => {
                 sx={{ 
                   borderRadius: 2, 
                   fontWeight: 600,
-                  borderColor: '#d32f2f',
-                  color: '#d32f2f',
+                  borderColor: 'var(--accent-red)',
+                  color: 'var(--accent-red)',
                   '&:hover': { 
-                    borderColor: '#b71c1c',
-                    backgroundColor: 'rgba(211, 47, 47, 0.1)'
+                    borderColor: 'var(--accent-red-dark)',
+                    backgroundColor: 'var(--accent-red-light)'
                   },
                   textTransform: 'none',
                   py: 1.5,
@@ -415,11 +468,11 @@ const BillPortal: React.FC = () => {
             </Stack>
 
             {/* Footer */}
-            <Box sx={{ textAlign: 'center', mt: 4, pt: 3, borderTop: '1px solid #e0e0e0' }}>
-              <Typography variant="body2" sx={{ color: '#666' }}>
+            <Box sx={{ textAlign: 'center', mt: 4, pt: 3, borderTop: '1px solid var(--border-color)' }}>
+              <Typography variant="body2" sx={{ color: 'var(--text-secondary)' }}>
                 Thank you for dining with us!
               </Typography>
-              <Typography variant="body2" sx={{ color: '#666' }}>
+              <Typography variant="body2" sx={{ color: 'var(--text-secondary)' }}>
                 Please visit again
               </Typography>
             </Box>
@@ -430,13 +483,13 @@ const BillPortal: React.FC = () => {
   }
 
   return (
-    <Box sx={{ minHeight: '100vh', backgroundColor: '#f8f9fa' }}>
+    <Box sx={{ minHeight: '100vh', backgroundColor: 'var(--bg-primary)' }}>
       <AppBar 
         position="sticky" 
         elevation={1}
         sx={{ 
-          backgroundColor: '#d32f2f',
-          boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+          backgroundColor: 'var(--accent-red)',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
         }}
       >
         <Toolbar>
@@ -468,7 +521,7 @@ const BillPortal: React.FC = () => {
         )}
 
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-          <Typography variant="h4" sx={{ fontWeight: 700, color: '#333' }}>
+          <Typography variant="h4" sx={{ fontWeight: 700, color: 'var(--text-primary)' }}>
             📄 Your Bills
           </Typography>
           
@@ -506,7 +559,8 @@ const BillPortal: React.FC = () => {
               p: 4, 
               textAlign: 'center',
               borderRadius: 3,
-              background: 'linear-gradient(135deg, #f5f5f5 0%, #ffffff 100%)',
+              background: 'var(--bg-secondary)',
+              border: '1px solid var(--border-color)',
             }}
           >
             <Avatar 
@@ -520,10 +574,10 @@ const BillPortal: React.FC = () => {
             >
               <ReceiptIcon sx={{ fontSize: 40 }} />
             </Avatar>
-            <Typography variant="h6" sx={{ color: '#666', mb: 1 }}>
+            <Typography variant="h6" sx={{ color: 'var(--text-secondary)', mb: 1 }}>
               No bills found
             </Typography>
-            <Typography variant="body1" sx={{ color: '#666', mb: 3 }}>
+            <Typography variant="body1" sx={{ color: 'var(--text-secondary)', mb: 3 }}>
               Bills will appear here after you place orders
             </Typography>
             <Button
@@ -533,8 +587,8 @@ const BillPortal: React.FC = () => {
               sx={{
                 borderRadius: 2,
                 fontWeight: 600,
-                backgroundColor: '#d32f2f',
-                '&:hover': { backgroundColor: '#b71c1c' },
+                backgroundColor: 'var(--accent-red)',
+                '&:hover': { backgroundColor: 'var(--accent-red-dark)' },
                 textTransform: 'none',
               }}
             >
@@ -563,47 +617,48 @@ const BillPortal: React.FC = () => {
                     borderRadius: 3,
                     transition: 'all 0.2s ease',
                     cursor: 'pointer',
-                    border: '1px solid #e0e0e0',
+                    border: '1px solid var(--border-color)',
+                    backgroundColor: 'var(--bg-secondary)',
                     '&:hover': { 
                       transform: 'translateY(-4px)',
                       boxShadow: 4,
-                      borderColor: '#d32f2f',
+                      borderColor: 'var(--accent-red)',
                     }
                   }}
                   onClick={() => setSelectedBill(bill)}
                 >
                   <CardContent sx={{ p: 3 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                      <Typography variant="h6" sx={{ fontWeight: 600, color: '#333' }}>
+                      <Typography variant="h6" sx={{ fontWeight: 600, color: 'var(--text-primary)' }}>
                         Bill #{bill.id}
                       </Typography>
                       <Chip 
-                        label={`₹${total}`}
+                        label={`₹${total.toFixed(2)}`}
                         sx={{ 
-                          backgroundColor: '#d32f2f',
+                          backgroundColor: 'var(--accent-red)',
                           color: 'white',
                           fontWeight: 600,
                         }}
                       />
                     </Box>
                     
-                    <Typography variant="body2" sx={{ color: '#666', mb: 2 }}>
+                    <Typography variant="body2" sx={{ color: 'var(--text-secondary)', mb: 2 }}>
                       {formatDate(bill.bill_time)}
                     </Typography>
                     
                     {bill.name !== 'Unknown' && (
-                      <Typography variant="body2" sx={{ mb: 1, color: '#333' }}>
+                      <Typography variant="body2" sx={{ mb: 1, color: 'var(--text-primary)' }}>
                         <strong>Customer:</strong> {bill.name}
                       </Typography>
                     )}
                     
                     {bill.table_number && (
-                      <Typography variant="body2" sx={{ mb: 2, color: '#333' }}>
+                      <Typography variant="body2" sx={{ mb: 2, color: 'var(--text-primary)' }}>
                         <strong>Table:</strong> {bill.table_number}
                       </Typography>
                     )}
                     
-                    <Typography variant="body2" sx={{ color: '#666', mb: 2 }}>
+                    <Typography variant="body2" sx={{ color: 'var(--text-secondary)', mb: 2 }}>
                       {items.length} item{items.length !== 1 ? 's' : ''}
                     </Typography>
                     
@@ -618,11 +673,11 @@ const BillPortal: React.FC = () => {
                       sx={{ 
                         borderRadius: 2,
                         fontWeight: 600,
-                        borderColor: '#d32f2f',
-                        color: '#d32f2f',
+                        borderColor: 'var(--accent-red)',
+                        color: 'var(--accent-red)',
                         '&:hover': {
-                          borderColor: '#b71c1c',
-                          backgroundColor: 'rgba(211, 47, 47, 0.1)',
+                          borderColor: 'var(--accent-red-dark)',
+                          backgroundColor: 'var(--accent-red-light)',
                         },
                         textTransform: 'none',
                       }}

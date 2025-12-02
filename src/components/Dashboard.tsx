@@ -17,11 +17,40 @@ import {
   Psychology as PsychologyIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
+import { usePermissions } from '../hooks/usePermissions';
+import { useNavigate } from 'react-router-dom';
 
 const Dashboard: React.FC = () => {
   const { user } = useAuth();
+  const { isRestaurantAdmin, isHRManager } = usePermissions();
+  const navigate = useNavigate();
+  const [checkingHR, setCheckingHR] = useState(true);
+  const [hrManagerExists, setHrManagerExists] = useState(false);
 
-  if (!user?.is_superuser && !user?.cafe_manager) {
+  useEffect(() => {
+    checkHRSetup();
+  }, []);
+
+  const checkHRSetup = async () => {
+    if (isHRManager()) {
+      setHrManagerExists(true);
+      setCheckingHR(false);
+      return;
+    }
+
+    if (isRestaurantAdmin()) {
+      try {
+        // Try to check if HR manager exists
+        // For now, we'll assume HR is not set up if user is restaurant admin but not HR manager
+        setHrManagerExists(false);
+      } catch (err) {
+        setHrManagerExists(false);
+      }
+    }
+    setCheckingHR(false);
+  };
+
+  if (!user?.is_superuser && !user?.cafe_manager && !user?.is_super_admin) {
     return (
       <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
         <Typography variant="h4" color="error">
@@ -30,6 +59,41 @@ const Dashboard: React.FC = () => {
         <Typography variant="body1">
           You don't have permission to access the dashboard.
         </Typography>
+      </Container>
+    );
+  }
+
+  // Show HR setup prompt for restaurant admins
+  if (isRestaurantAdmin() && !isHRManager() && !checkingHR && !hrManagerExists) {
+    return (
+      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+        <Box sx={{ 
+          bgcolor: 'warning.dark', 
+          p: 3, 
+          borderRadius: 2, 
+          mb: 3,
+          border: '1px solid',
+          borderColor: 'warning.main'
+        }}>
+          <Typography variant="h5" sx={{ mb: 2, color: 'warning.light' }}>
+            HR Manager Not Set Up
+          </Typography>
+          <Typography variant="body1" sx={{ mb: 3, color: 'text.secondary' }}>
+            You need to set up an HR Manager account before you can access HR features. 
+            The HR Manager will be able to manage employees, payroll, attendance, and other HR functions for your restaurant.
+          </Typography>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={() => navigate('/hr-setup')}
+            sx={{ 
+              bgcolor: 'error.main',
+              '&:hover': { bgcolor: 'error.dark' }
+            }}
+          >
+            Set Up HR Manager Account
+          </Button>
+        </Box>
       </Container>
     );
   }

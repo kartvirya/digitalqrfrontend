@@ -15,7 +15,8 @@ import {
   CheckCircle as CheckCircleIcon,
   Schedule as ScheduleIcon,
   Restaurant as RestaurantIcon,
-  Done as DoneIcon
+  Done as DoneIcon,
+  Payments as PaymentsIcon
 } from '@mui/icons-material';
 import { useSearchParams } from 'react-router-dom';
 import { apiService } from '../services/api';
@@ -25,6 +26,7 @@ const TableOrders: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [searchParams] = useSearchParams();
 
   const tableUniqueId = searchParams.get('table');
@@ -47,7 +49,7 @@ const TableOrders: React.FC = () => {
         
         setOrders(ordersData);
       } catch (error: any) {
-        setError(error.response?.data?.error || 'Failed to load orders');
+        setError(error.response?.data?.error || error.message || 'Failed to load orders');
       } finally {
         setLoading(false);
       }
@@ -83,6 +85,25 @@ const TableOrders: React.FC = () => {
         return <DoneIcon color="success" />;
       default:
         return <ScheduleIcon color="disabled" />;
+    }
+  };
+
+  const handleMarkPaid = async (orderId: number) => {
+    if (!window.confirm(`Mark Order #${orderId} as paid and free this table/room?`)) {
+      return;
+    }
+    try {
+      setLoading(true);
+      setError('');
+      setSuccess('');
+      const updated = await apiService.markOrderPaid(orderId, 'cash');
+      setOrders(prev => prev.map(o => (o.id === updated.id ? updated : o)));
+      setSuccess(`Order #${orderId} marked as paid.`);
+    } catch (error: any) {
+      console.error('Error marking order as paid from TableOrders:', error);
+      setError(error.message || 'Failed to mark order as paid.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -137,6 +158,12 @@ const TableOrders: React.FC = () => {
         </Button>
       </Box>
 
+      {success && (
+        <Alert severity="success" sx={{ mb: 2 }}>
+          {success}
+        </Alert>
+      )}
+
       {orders.length === 0 ? (
         <Paper sx={{ p: 4, textAlign: 'center' }}>
           <Typography variant="h6" gutterBottom>
@@ -184,13 +211,28 @@ const TableOrders: React.FC = () => {
                         {new Date(order.created_at).toLocaleString()}
                       </Typography>
                     </Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      {getStatusIcon(order.status)}
-                      <Chip 
-                        label={order.status.toUpperCase()} 
-                        color={getStatusColor(order.status) as any}
-                        size="small"
-                      />
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        {getStatusIcon(order.status)}
+                        <Chip 
+                          label={order.status.toUpperCase()} 
+                          color={getStatusColor(order.status) as any}
+                          size="small"
+                        />
+                      </Box>
+                      {order.payment_status && (
+                        <Chip
+                          icon={<PaymentsIcon />}
+                          label={
+                            order.payment_status === 'paid'
+                              ? `PAID${order.payment_method ? ` • ${order.payment_method}` : ''}`
+                              : order.payment_status.replace('_', ' ').toUpperCase()
+                          }
+                          color={order.payment_status === 'paid' ? 'success' : 'warning'}
+                          size="small"
+                          variant="outlined"
+                        />
+                      )}
                     </Box>
                   </Box>
 
@@ -240,7 +282,7 @@ const TableOrders: React.FC = () => {
                     ))}
                   </Box>
 
-                  <Box sx={{ mt: 2, display: 'flex', gap: 1 }}>
+                  <Box sx={{ mt: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                     <Button
                       variant="outlined"
                       size="small"
@@ -254,6 +296,16 @@ const TableOrders: React.FC = () => {
                       }}
                     >
                       Track Order
+                    </Button>
+                    <Button
+                      variant="contained"
+                      size="small"
+                      color="success"
+                      disabled={order.payment_status === 'paid'}
+                      onClick={() => handleMarkPaid(order.id)}
+                      startIcon={<PaymentsIcon />}
+                    >
+                      {order.payment_status === 'paid' ? 'Already Paid' : 'Mark Paid'}
                     </Button>
                   </Box>
                 </CardContent>

@@ -33,6 +33,7 @@ import {
 } from '@mui/icons-material';
 import { useSearchParams } from 'react-router-dom';
 import { apiService } from '../services/api';
+import type { MenuItem as ApiMenuItem } from '../types';
 
 interface BillItem {
   name: string;
@@ -50,18 +51,13 @@ interface Bill {
   table_number?: string;
 }
 
-interface MenuItem {
-  id: number;
-  name: string;
-  price: string;
-}
-
 const BillPortal: React.FC = () => {
   const [bills, setBills] = useState<Bill[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  // Reuse shared MenuItem type from ../types so price can be string | number
+  const [menuItems, setMenuItems] = useState<ApiMenuItem[]>([]);
 
   const theme = useTheme();
   const [searchParams] = useSearchParams();
@@ -77,7 +73,15 @@ const BillPortal: React.FC = () => {
   const loadMenuItems = async () => {
     try {
       const items = await apiService.getMenuItems();
-      setMenuItems(items);
+      // Ensure we always have a numeric price available for calculations
+      const normalized = items.map((item) => ({
+        ...item,
+        price:
+          typeof item.price === 'string'
+            ? item.price
+            : item.price.toString(),
+      }));
+      setMenuItems(normalized);
     } catch (error) {
       console.error('Failed to load menu items:', error);
     }

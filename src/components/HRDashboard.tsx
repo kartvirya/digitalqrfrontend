@@ -45,6 +45,7 @@ const HRDashboard: React.FC = () => {
         setHrUser({
           id: user.id,
           phone: user.phone || '',
+          is_superuser: (user as any).is_superuser ?? false,
           cafe_manager: user.cafe_manager || false,
           staff_profile: (user as any).staff_profile,
         });
